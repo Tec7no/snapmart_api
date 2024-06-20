@@ -6,7 +6,7 @@ PASS = ""
 SECRET = ""
 
 Email & Password depend on your smtp server you use 
-i am using "https://ethereal.email/" .
+u can use "https://ethereal.email/"  as a test .
 
 SECRET you generate locally from python .
 
