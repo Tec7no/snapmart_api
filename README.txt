@@ -1,4 +1,4 @@
-first u have to creat 
+first u have to create 
 .env file 
 
 EMAIL = ""
