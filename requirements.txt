@@ -1,4 +1,4 @@
-﻿aiofiles==23.2.1
+aiofiles==23.2.1
 aiomysql==0.2.0
 aiosmtplib==2.0.2
 aiosqlite==0.17.0
@@ -36,3 +36,4 @@ starlette==0.36.3
 tortoise-orm==0.20.0
 typing_extensions==4.10.0
 uvicorn==0.28.0
+Pillow==9.4.0
