@@ -1,4 +1,21 @@
+import logging
+import smtplib
+import uuid
+from _pydatetime import timedelta
+from contextvars import Token
 from datetime import datetime
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+import pyotp
+
+from pydantic import BaseModel
+from starlette.middleware.cors import CORSMiddleware
+from fastapi import HTTPException
+from fastapi import BackgroundTasks
+from tortoise.transactions import in_transaction
+from datetime import datetime, timedelta
+from insert_data import load_data_from_csv
+from pydantic import BaseModel
 
 import jwt
 from fastapi import FastAPI, Request, HTTPException, status, Depends
@@ -17,7 +34,8 @@ from emails import *
 # response classes
 from fastapi.responses import HTMLResponse
 from models import user_pydanticIn, user_pydantic, business_pydantic, Business, Product, product_pydanticIn, \
-    product_pydantic, business_pydanticIn
+    product_pydantic, business_pydanticIn, PasswordResetToken, NormalUser, NormalUserLogin, NormalUserRegistration, \
+    MessageResponse, AuthToken
 
 # templates
 from fastapi.templating import Jinja2Templates
@@ -34,6 +52,7 @@ from fastapi.responses import JSONResponse
 app = FastAPI()
 
 oath2_scheme = OAuth2PasswordBearer(tokenUrl='token')
+oauth2_scheme_normal = OAuth2PasswordBearer(tokenUrl='token_normal')
 
 # static file setup config
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -56,6 +75,18 @@ async def get_current_user(token: str = Depends(oath2_scheme)):
         )
     return await user
 
+# Dependency to get current normal user
+async def get_current_normal_user(token: str = Depends(oath2_scheme)):
+    try:
+        payload = jwt.decode(token, config_credentials["SECRET"], algorithms=['HS256'])
+        user = await NormalUser.get(id=payload.get("id"))
+    except:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    return user
 
 @app.post("/user/me")
 async def user_login(user: user_pydanticIn = Depends(get_current_user)):
@@ -254,7 +285,7 @@ async def get_product(id: int):
                         "name" : business.business_name,
                         "city" : business.city,
                         "region": business.region,
-                        "description" : business.business_desription,
+                        "description" : business.business_description,
                         "logo" : business.logo,
                         "owner_id" : owner.id,
                         "business_id": business.id,
@@ -323,6 +354,144 @@ async def update_business(id: int, update_business: business_pydanticIn, user: u
         )
 
 
+origins = [
+    "http://localhost",
+    "http://localhost:8000"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+# إعداد تسجيل الأخطاء
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+oath2_scheme = OAuth2PasswordBearer(tokenUrl='token')
+
+async def get_current_user(token: str = Depends(oath2_scheme)):
+    try:
+        payload = jwt.decode(token, config_credentials["SECRET"], algorithms=['HS256'])
+        user = await User.get(id = payload.get("id"))
+
+    except:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    return await user
+
+@app.post("/uploadfile/csv")
+async def upload_csv_file(file: UploadFile = File(...), user: user_pydanticIn = Depends(get_current_user)):
+    file_location = f"{file.filename}"
+    with open(file_location, "wb+") as file_object:
+        file_object.write(file.file.read())
+
+    await load_data_from_csv(file_location)
+    return {"info": "file processed successfully"}
+
+@app.put("/user/change-password")
+async def change_password_endpoint(new_password: str, current_password: str, user: user_pydanticIn = Depends(get_current_user)):
+    # Retrieve user from database
+    user_obj = await User.get(username=user.username)
+
+    # Verify the current password
+    if not await verify_password(current_password, user_obj.password):
+        raise HTTPException(status_code=400, detail="Incorrect current password")
+
+    # Hash the new password
+    hashed_password = get_hashed_password(new_password)
+
+    # Update the user's password
+    user_obj.password = hashed_password
+    await user_obj.save()
+
+    return {"status": "ok", "message": "Password updated successfully"}
+
+
+@app.post('/token_normal')
+async def generate_token_normal(request_form: OAuth2PasswordRequestForm = Depends()):
+    token = await token_generator(request_form.username, request_form.password)
+    return {"access_token": token, "token_type": "bearer"}
+
+# Dependency to get current normal user
+async def get_current_normal_user(token: str = Depends(oauth2_scheme_normal)):
+    try:
+        payload = jwt.decode(token, config_credentials["SECRET"], algorithms=['HS256'])
+        user = await NormalUser.get(id=payload.get("id"))
+
+    except:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    return user
+
+# Authentication functions (to be implemented based on your requirements)
+def verify_token(token: str) -> str:
+    try:
+        payload = jwt.decode(token, config_credentials["SECRET"], algorithms=['HS256'])
+        return payload["sub"]
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, config_credentials["SECRET"], algorithm="HS256")
+    return encoded_jwt
+
+@app.post("/register", response_model=MessageResponse)
+async def register_normal_user(user_info: NormalUserRegistration):
+    async with in_transaction() as conn:
+        hashed_password = get_hashed_password(user_info.password)
+        user_obj = await NormalUser.create(
+            email=user_info.email,
+            username=user_info.username,
+            password=hashed_password
+        )
+    return {"message": "Normal user registered successfully"}
+
+@app.post("/login", response_model=AuthToken)
+async def login_normal_user(user_info: NormalUserLogin):
+    user = await NormalUser.get_or_none(email=user_info.email)
+
+    if not user or not verify_password(user_info.password, user.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    access_token = create_access_token(data={"sub": user.email})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.put("/normal-user/change-password", response_model=MessageResponse)
+async def change_normal_user_password(
+    new_password: str,
+    current_password: str,
+    user: NormalUser = Depends(get_current_normal_user)
+):
+    if not verify_password(current_password, user.password):
+        raise HTTPException(status_code=400, detail="Incorrect current password")
+
+    hashed_password = get_hashed_password(new_password)
+    user.password = hashed_password
+    await user.save()
+
+    return {"status": "ok", "message": "Password updated successfully"}
+
 register_tortoise(
     app,
     db_url="sqlite://database.sqlite3",
@@ -330,6 +499,7 @@ register_tortoise(
     generate_schemas=True,
     add_exception_handlers=True
 )
+
 
 def main():
     import uvicorn

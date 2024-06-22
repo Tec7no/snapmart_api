@@ -19,6 +19,10 @@ conf = ConnectionConfig(
     USE_CREDENTIALS=True,
 )
 
+
+
+
+
 # In send_email function
 async def send_email(email: str, instance: User):  # Change email to str instead of List[str]
     token_data = {
@@ -54,3 +58,7 @@ async def send_email(email: str, instance: User):  # Change email to str instead
 
     fm = FastMail(conf)
     await fm.send_message(message=message)
+
+
+
+
