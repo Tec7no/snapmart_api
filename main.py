@@ -1,7 +1,7 @@
 import logging
 import smtplib
 import uuid
-from _pydatetime import timedelta
+from datetime import timedelta
 from contextvars import Token
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
