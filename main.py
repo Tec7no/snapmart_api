@@ -14,6 +14,7 @@ from fastapi import HTTPException
 from fastapi import BackgroundTasks
 from tortoise.transactions import in_transaction
 from datetime import datetime, timedelta
+from insert_data import load_data_from_csv
 from pydantic import BaseModel
 
 import jwt
@@ -52,6 +53,7 @@ from fastapi.responses import JSONResponse
 app = FastAPI()
 
 oath2_scheme = OAuth2PasswordBearer(tokenUrl='token')
+oauth2_scheme_normal = OAuth2PasswordBearer(tokenUrl='token_normal')
 
 # static file setup config
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -375,7 +377,28 @@ async def get_current_user(token: str = Depends(oath2_scheme)):
         )
     return await user
 
+async def get_current_normal_user(token_normal: str = Depends(oauth2_scheme_normal)):
+    try:
+        payload = jwt.decode(token_normal, config_credentials["SECRET"], algorithms=['HS256'])
+        user = await NormalUser.get(id=payload.get("id"))
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    return user
 
+
+
+@app.post("/uploadfile/csv")
+async def upload_csv_file(file: UploadFile = File(...), user: user_pydanticIn = Depends(get_current_user)):
+    file_location = f"{file.filename}"
+    with open(file_location, "wb+") as file_object:
+        file_object.write(file.file.read())
+
+    await load_data_from_csv(file_location)
+    return {"info": "file processed successfully"}
 
 
 
@@ -397,6 +420,7 @@ async def change_password_endpoint(new_password: str, current_password: str, use
 
     return {"status": "ok", "message": "Password updated successfully"}
 
+
 register_tortoise(
     app,
     db_url="sqlite://database.sqlite3",
@@ -405,7 +429,7 @@ register_tortoise(
     add_exception_handlers=True
 )
 
-oauth2_scheme_normal = OAuth2PasswordBearer(tokenUrl='token_normal')
+
 
 # Token generator function (replace with your implementation)
 async def token_generator(username: str, password: str) -> str:
@@ -491,6 +515,25 @@ async def user_registrations(user: normal_user_pydanticIn):
         "status": "ok",
         "data": f"Hello {new_user.username}, thanks for choosing snapmart. Please check your email inbox and click on the link to verify your account.",
     }
+
+
+@app.put("/normal-user/change-password")
+async def change_password_endpoint(new_password: str, current_password: str, user: normal_user_pydanticIn = Depends(get_current_normal_user)):
+    # Retrieve user from database
+    user_obj = await NormalUser.get(username=user.username)
+
+    # Verify the current password
+    if not await verify_password(current_password, user_obj.password):
+        raise HTTPException(status_code=400, detail="Incorrect current password")
+
+    # Hash the new password
+    hashed_password = get_hashed_password(new_password)
+
+    # Update the user's password
+    user_obj.password = hashed_password
+    await user_obj.save()
+
+    return {"status": "ok", "message": "Password updated successfully"}
 
 
 def main():
