@@ -35,7 +35,8 @@ from emails import *
 from fastapi.responses import HTMLResponse
 from models import user_pydanticIn, user_pydantic, business_pydantic, Business, Product, product_pydanticIn, \
     product_pydantic, business_pydanticIn, PasswordResetToken, NormalUser, NormalUserLogin, NormalUserRegistration, \
-    MessageResponse, AuthToken
+    MessageResponse, AuthToken, normal_user_pydanticIn, normal_user_pydantic, Account, account_pydantic, \
+    normal_user_pydanticOut
 
 # templates
 from fastapi.templating import Jinja2Templates
@@ -52,7 +53,6 @@ from fastapi.responses import JSONResponse
 app = FastAPI()
 
 oath2_scheme = OAuth2PasswordBearer(tokenUrl='token')
-oauth2_scheme_normal = OAuth2PasswordBearer(tokenUrl='token_normal')
 
 # static file setup config
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -74,19 +74,6 @@ async def get_current_user(token: str = Depends(oath2_scheme)):
             headers={"WWW-Authenticate": "Bearer"}
         )
     return await user
-
-# Dependency to get current normal user
-async def get_current_normal_user(token: str = Depends(oath2_scheme)):
-    try:
-        payload = jwt.decode(token, config_credentials["SECRET"], algorithms=['HS256'])
-        user = await NormalUser.get(id=payload.get("id"))
-    except:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-    return user
 
 @app.post("/user/me")
 async def user_login(user: user_pydanticIn = Depends(get_current_user)):
@@ -143,6 +130,8 @@ async def email_verification(request: Request, token: str):
             headers={"WWW-Authenticate": "Bearer"}
         )
 
+
+
 @app.post("/registration")
 async def user_registrations(user: user_pydanticIn):
     user_info = user.dict(exclude_unset=True)
@@ -153,6 +142,8 @@ async def user_registrations(user: user_pydanticIn):
         "status": "ok",
         "data": f"Hello {new_user.username} , thanks for choosing snapmart. please check your email inbox and click on the link to verify your account .",
     }
+
+
 
 
 @app.get("/")
@@ -385,6 +376,14 @@ async def get_current_user(token: str = Depends(oath2_scheme)):
         )
     return await user
 
+@app.post("/uploadfile/csv")
+async def upload_csv_file(file: UploadFile = File(...), user: user_pydanticIn = Depends(get_current_user)):
+    file_location = f"{file.filename}"
+    with open(file_location, "wb+") as file_object:
+        file_object.write(file.file.read())
+
+    await load_data_from_csv(file_location)
+    return {"info": "file processed successfully"}
 
 
 
@@ -406,86 +405,6 @@ async def change_password_endpoint(new_password: str, current_password: str, use
 
     return {"status": "ok", "message": "Password updated successfully"}
 
-
-@app.post('/token_normal')
-async def generate_token_normal(request_form: OAuth2PasswordRequestForm = Depends()):
-    token = await token_generator(request_form.username, request_form.password)
-    return {"access_token": token, "token_type": "bearer"}
-
-# Dependency to get current normal user
-async def get_current_normal_user(token: str = Depends(oauth2_scheme_normal)):
-    try:
-        payload = jwt.decode(token, config_credentials["SECRET"], algorithms=['HS256'])
-        user = await NormalUser.get(id=payload.get("id"))
-
-    except:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-    return user
-
-# Authentication functions (to be implemented based on your requirements)
-def verify_token(token: str) -> str:
-    try:
-        payload = jwt.decode(token, config_credentials["SECRET"], algorithms=['HS256'])
-        return payload["sub"]
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
-def create_access_token(data: dict, expires_delta: timedelta = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, config_credentials["SECRET"], algorithm="HS256")
-    return encoded_jwt
-
-@app.post("/register", response_model=MessageResponse)
-async def register_normal_user(user_info: NormalUserRegistration):
-    async with in_transaction() as conn:
-        hashed_password = get_hashed_password(user_info.password)
-        user_obj = await NormalUser.create(
-            email=user_info.email,
-            username=user_info.username,
-            password=hashed_password
-        )
-    return {"message": "Normal user registered successfully"}
-
-@app.post("/login", response_model=AuthToken)
-async def login_normal_user(user_info: NormalUserLogin):
-    user = await NormalUser.get_or_none(email=user_info.email)
-
-    if not user or not verify_password(user_info.password, user.password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-
-    access_token = create_access_token(data={"sub": user.email})
-    return {"access_token": access_token, "token_type": "bearer"}
-
-@app.put("/normal-user/change-password", response_model=MessageResponse)
-async def change_normal_user_password(
-    new_password: str,
-    current_password: str,
-    user: NormalUser = Depends(get_current_normal_user)
-):
-    if not verify_password(current_password, user.password):
-        raise HTTPException(status_code=400, detail="Incorrect current password")
-
-    hashed_password = get_hashed_password(new_password)
-    user.password = hashed_password
-    await user.save()
-
-    return {"status": "ok", "message": "Password updated successfully"}
-
 register_tortoise(
     app,
     db_url="sqlite://database.sqlite3",
@@ -493,6 +412,93 @@ register_tortoise(
     generate_schemas=True,
     add_exception_handlers=True
 )
+
+oauth2_scheme_normal = OAuth2PasswordBearer(tokenUrl='token_normal')
+
+# Token generator function (replace with your implementation)
+async def token_generator(username: str, password: str) -> str:
+    # Dummy implementation
+    user = await NormalUser.get(username=username)  # Assuming you validate the user here
+    payload = {"id": user.id, "exp": datetime.utcnow() + timedelta(hours=1)}
+    return jwt.encode(payload, config_credentials["SECRET"], algorithm='HS256')
+
+@app.post('/token_normal')
+async def generate_token(request_from: OAuth2PasswordRequestForm = Depends()):
+    token_normal = await token_generator(request_from.username, request_from.password)
+    return {"access_token": token_normal, "token_type": "bearer"}
+
+async def get_current_normal_user(token_normal: str = Depends(oauth2_scheme_normal)):
+    try:
+        payload = jwt.decode(token_normal, config_credentials["SECRET"], algorithms=['HS256'])
+        user = await NormalUser.get(id=payload.get("id"))
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    return user
+
+@app.post("/normal_user/me")
+async def user_login(user: normal_user_pydanticIn = Depends(get_current_normal_user)):
+    account = await Account.get(owner=user)
+    logo = account.logo  # e.g., asl6as5d4.png
+    logo_path = f"http://localhost:8000/static/images/{logo}"
+
+    return {
+        "status": "ok",
+        "data": {
+            "username": user.username,
+            "email": user.email,
+            "verified": user.is_verified,
+            "joined_date": user.join_date.strftime("%b %d %Y"),
+            "logo": logo_path
+        }
+    }
+
+@post_save(NormalUser)
+async def create_account(
+        sender: Type[NormalUser],
+        instance: NormalUser,
+        created: bool,
+        using_db: Optional[BaseDBAsyncClient],
+        update_fields: List[str]
+) -> None:
+    if created:
+        account_obj = await Account.create(account_name=instance.username, owner=instance)
+        await account_pydantic.from_tortoise_orm(account_obj)
+        await send_email([instance.email], instance)  # Assuming send_email is defined
+
+@app.get('/verification_normal', response_class=HTMLResponse)
+async def email_verification(request: Request, token_normal: str):
+    try:
+        user = await verify_token(token_normal)  # Assuming verify_token is defined
+        if user and not user.is_verified:
+            user.is_verified = True
+            await user.save()
+            return templates.TemplateResponse("verification.html", {"request": request, "username": user.username})
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User is already verified or token is invalid",
+            )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+@app.post("/registration_normal")
+async def user_registrations(user: normal_user_pydanticIn):
+    user_info = user.dict(exclude_unset=True)
+    user_info["password"] = get_hashed_password(user_info["password"])  # Assuming get_hashed_password is defined
+    user_obj = await NormalUser.create(**user_info)
+    new_user = await normal_user_pydantic.from_tortoise_orm(user_obj)
+    return {
+        "status": "ok",
+        "data": f"Hello {new_user.username}, thanks for choosing snapmart. Please check your email inbox and click on the link to verify your account.",
+    }
 
 
 def main():
