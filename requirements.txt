@@ -33,6 +33,8 @@ pytz==2024.1
 sniffio==1.3.1
 SQLAlchemy==2.0.28
 starlette==0.36.3
+pandas==1.3.0
+
 tortoise-orm==0.20.0
 typing_extensions==4.10.0
 uvicorn==0.28.0
