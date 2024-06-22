@@ -6,7 +6,6 @@ from contextvars import Token
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-import pyotp
 
 from pydantic import BaseModel
 from starlette.middleware.cors import CORSMiddleware
@@ -14,7 +13,6 @@ from fastapi import HTTPException
 from fastapi import BackgroundTasks
 from tortoise.transactions import in_transaction
 from datetime import datetime, timedelta
-from insert_data import load_data_from_csv
 from pydantic import BaseModel
 
 import jwt
@@ -388,18 +386,6 @@ async def get_current_normal_user(token_normal: str = Depends(oauth2_scheme_norm
             headers={"WWW-Authenticate": "Bearer"}
         )
     return user
-
-
-
-@app.post("/uploadfile/csv")
-async def upload_csv_file(file: UploadFile = File(...), user: user_pydanticIn = Depends(get_current_user)):
-    file_location = f"{file.filename}"
-    with open(file_location, "wb+") as file_object:
-        file_object.write(file.file.read())
-
-    await load_data_from_csv(file_location)
-    return {"info": "file processed successfully"}
-
 
 
 @app.put("/user/change-password")
