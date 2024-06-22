@@ -6,7 +6,6 @@ from contextvars import Token
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-import pyotp
 
 from pydantic import BaseModel
 from starlette.middleware.cors import CORSMiddleware
