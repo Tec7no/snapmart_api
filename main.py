@@ -14,7 +14,6 @@ from fastapi import HTTPException
 from fastapi import BackgroundTasks
 from tortoise.transactions import in_transaction
 from datetime import datetime, timedelta
-from insert_data import load_data_from_csv
 from pydantic import BaseModel
 
 import jwt
