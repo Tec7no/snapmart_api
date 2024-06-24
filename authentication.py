@@ -3,7 +3,7 @@ from passlib.context import CryptContext
 from dotenv import dotenv_values
 from fastapi import status, HTTPException
 
-from models import User
+from models import Vendor
 
 config_credentials = dotenv_values(".env")
 
@@ -18,7 +18,7 @@ def get_hashed_password(password):
 async def verify_token(token: str):
     try:
         payload = jwt.decode(token, config_credentials["SECRET"], algorithms=['HS256'])
-        user = await User.get(id=payload.get("id"))
+        user = await Vendor.get(id=payload.get("id"))
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -42,7 +42,7 @@ async def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
 async def authenticate_user(username, password):
-    user = await User.get(username = username)
+    user = await Vendor.get(username = username)
 
     if user and verify_password(password, user.password):
         return user
