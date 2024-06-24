@@ -342,7 +342,7 @@ async def change_password_endpoint(new_password: str, current_password: str, use
 
 register_tortoise(
     app,
-    db_url="sqlite://database.sqlite3",
+    db_url="sqlitecloud://cr8hzuzqik.sqlite.cloud:8860?apikey=shvDEhJLn2hImQFcRvyolCMUq0zUDnPa6WNNi1eigUc",
     modules={"models": ["models"]},
     generate_schemas=True,
     add_exception_handlers=True
