@@ -8,8 +8,7 @@ from pydantic import BaseModel
 
 class PasswordResetToken(Model):
     id = fields.IntField(pk=True)
-    user = fields.ForeignKeyField('models.User', related_name='password_reset_tokens', null=True)
-    normal_user = fields.ForeignKeyField('models.NormalUser', related_name='password_reset_tokens', null=True)
+    user = fields.ForeignKeyField('models.Vendor', related_name='password_reset_tokens', null=True)
     token = fields.UUIDField(default=uuid.uuid4)
     expires_at = fields.DatetimeField()
 
@@ -33,19 +32,7 @@ class AuthToken(BaseModel):
     token_type: str
 
 
-class NormalUser(Model):
-    id = fields.IntField(pk=True, index=True)
-    username = fields.CharField(max_length=20, null=False, unique=True)
-    email = fields.CharField(max_length=200, null=False, unique=True)
-    password = fields.CharField(max_length=100, null=False)
-    is_verified = fields.BooleanField(default=False)
-    join_date = fields.DatetimeField(default=datetime.utcnow)
-
-    class Meta:
-        table = "normal_users"
-
-
-class User(Model):
+class Vendor(Model):
     id = fields.IntField(pk=True, index=True)
     username = fields.CharField(max_length=20, null=False, unique=True)
     email = fields.CharField(max_length=200, null=False, unique=True)
@@ -61,16 +48,7 @@ class Business(Model):
     postal_code = fields.CharField(max_length=100, null=False, default="Unspecified")
     business_description = fields.TextField(null=True)
     logo = fields.CharField(max_length=200, null=False, default="default.jpg")
-    owner = fields.ForeignKeyField("models.User", related_name="businesses")
-
-
-class Account(Model):
-    id = fields.IntField(pk=True, index=True)
-    account_name = fields.CharField(max_length=20, null=False, unique=True)
-    city = fields.CharField(max_length=100, null=False, default="Unspecified")
-    postal_code = fields.CharField(max_length=100, null=False, default="Unspecified")
-    logo = fields.CharField(max_length=200, null=False, default="default.jpg")
-    owner = fields.ForeignKeyField("models.NormalUser", related_name="accountant")
+    owner = fields.ForeignKeyField("models.Vendor", related_name="businesses")
 
 
 class Product(Model):
@@ -86,33 +64,15 @@ class Product(Model):
     business = fields.ForeignKeyField("models.Business", related_name="products")
 
 
-class NormalUserRegistration(BaseModel):
-    email: str
-    username: str
-    password: str
-
-
-class NormalUserLogin(BaseModel):
-    email: str
-    password: str
-
-
 class ChangePassword(BaseModel):
     current_password: str
     new_password: str
 
 
 # Pydantic models creation
-user_pydantic = pydantic_model_creator(User, name="User", exclude=("is_verified",))
-user_pydanticIn = pydantic_model_creator(User, name="UserIn", exclude_readonly=True, exclude=("is_verified", "join_date"))
-user_pydanticOut = pydantic_model_creator(User, name="UserOut", exclude=("password",))
-
-normal_user_pydantic = pydantic_model_creator(NormalUser, name="NormalUser", exclude=("is_verified",))
-normal_user_pydanticIn = pydantic_model_creator(NormalUser, name="NormalUserIn", exclude_readonly=True, exclude=("is_verified", "join_date"))
-normal_user_pydanticOut = pydantic_model_creator(NormalUser, name="NormalUserOut", exclude=("password",))
-
-account_pydantic = pydantic_model_creator(Account, name="Account")
-account_pydanticIn = pydantic_model_creator(Account, name="AccountIn", exclude=("logo", "id"))
+user_pydantic = pydantic_model_creator(Vendor, name="Vendor", exclude=("is_verified",))
+user_pydanticIn = pydantic_model_creator(Vendor, name="VendorIn", exclude_readonly=True, exclude=("is_verified", "join_date"))
+user_pydanticOut = pydantic_model_creator(Vendor, name="VendorOut", exclude=("password",))
 
 business_pydantic = pydantic_model_creator(Business, name="Business")
 business_pydanticIn = pydantic_model_creator(Business, name="BusinessIn", exclude=("logo", "id"))
