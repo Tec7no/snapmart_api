@@ -2,7 +2,7 @@ from fastapi import HTTPException
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
 from dotenv import dotenv_values
 import jwt
-from models import User
+from models import Vendor
 
 # Load environment variables
 config_credentials = dotenv_values(".env")
@@ -24,7 +24,7 @@ conf = ConnectionConfig(
 
 
 # In send_email function
-async def send_email(email: str, instance: User):  # Change email to str instead of List[str]
+async def send_email(email: str, instance: Vendor):  # Change email to str instead of List[str]
     token_data = {
         "id": instance.id,
         "username": instance.username
