@@ -27,8 +27,7 @@ from fastapi import File, UploadFile
 import secrets
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
-import os
-from fastapi.responses import JSONResponse
+
 
 
 app = FastAPI()
@@ -57,11 +56,11 @@ async def get_current_user(token: str = Depends(oath2_scheme)):
     return await user
 
 
-@app.post("/user/me")
+@app.post("/vendor/me")
 async def user_login(user: user_pydanticIn = Depends(get_current_user)):
     business = await Business.get(owner=user)
     logo = business.logo #asl6as5d4.png
-    logo_path = "localhost:8000/static/images"+logo
+    logo_path = "localhost:8000/static/images/logo"+logo
 
     return {
         "status": "ok",
@@ -131,7 +130,7 @@ def index():
 @app.post("/uploadfile/profile")
 async def create_upload_file(file: UploadFile = File(...),
                              user: user_pydantic = Depends(get_current_user)):
-    FILEPATH = "./static/images"
+    FILEPATH = "./static/images/logo"
     filename = file.filename
     # test.png >> ["test", "png"]
     extenstion = filename.split(".")[1]
@@ -173,7 +172,7 @@ async def create_upload_file(file: UploadFile = File(...),
 @app.post("/uploadfile/product/{id}")
 async def create_upload_file(id: int, file: UploadFile = File(...),
                              user: user_pydanticIn = Depends(get_current_user)):
-    FILEPATH = "./static/images"
+    FILEPATH = "./static/images/product"
     filename = file.filename
     # test.png >> ["test", "png"]
     extenstion = filename.split(".")[1]
@@ -211,7 +210,7 @@ async def create_upload_file(id: int, file: UploadFile = File(...),
         )
 
     # Assuming your server is running locally on port 8000
-    file_url = "http://localhost:8000/static/images/" + token_name
+    file_url = "http://localhost:8000/static/images/products/" + token_name
     return {"status": "ok", "filename": file_url}
 
 
